@@ -848,7 +848,8 @@ requestAnimationFrame(gameLoop);
     document.querySelectorAll("#anatomyTabs button").forEach(function(b){ b.hidden = show.indexOf(b.dataset.env)<0; });
     if(window.__anatomySwitch) window.__anatomySwitch(p===1 ? "grid" : "llm");
   }
-  var SUB = "anim";
+  var SUB = "anim", TAB = null;
+  var VALID = { shared:[], phase1:["anim","watch","anatomy"], phase2:["anim","watch","anatomy","data"] };
   function showSub(sub){
     SUB = sub;
     document.querySelector(".controls").hidden = !(sub==="anim" || sub==="watch");
@@ -859,6 +860,7 @@ requestAnimationFrame(gameLoop);
     document.querySelectorAll("#subtabs button").forEach(function(b){ b.classList.toggle("on", b.dataset.sub===sub); });
   }
   function showMainTab(tab){
+    TAB = tab;
     var shared = tab === "shared", p2 = tab === "phase2";
     document.getElementById("cardSharedInfra").hidden = !shared;
     document.getElementById("cardCompare").hidden = !shared;
@@ -881,9 +883,26 @@ requestAnimationFrame(gameLoop);
     if(SUB === "data" && !p2) SUB = "anim";
     showSub(SUB);
   }
-  document.querySelectorAll("#maintabs button").forEach(function(b){ b.onclick=function(){ showMainTab(b.dataset.view); }; });
-  document.querySelectorAll("#subtabs button").forEach(function(b){ b.onclick=function(){ showSub(b.dataset.sub); }; });
-  showMainTab("phase1");
+  // URL <-> state: the location hash is the source of truth, e.g. #phase2/data or #phase1/watch.
+  function subFor(tab){ var s = SUB; if(tab!=="shared" && VALID[tab].indexOf(s)<0) s = "anim"; return s; }
+  function applyHash(){
+    var h = (location.hash||"").replace(/^#/,""), pp = h.split("/");
+    var tab = pp[0], sub = pp[1];
+    if(["shared","phase1","phase2"].indexOf(tab) < 0) tab = "phase1";
+    if(tab!=="shared" && VALID[tab].indexOf(sub) < 0) sub = VALID[tab].indexOf(SUB) >= 0 ? SUB : "anim";
+    if(tab !== TAB){ if(sub) SUB = sub; showMainTab(tab); }
+    else if(tab !== "shared" && sub && sub !== SUB){ showSub(sub); }
+    var canon = TAB === "shared" ? "#shared" : "#" + TAB + "/" + SUB;
+    if(location.hash !== canon){ try{ history.replaceState(null, "", canon); }catch(e){} }
+  }
+  document.querySelectorAll("#maintabs button").forEach(function(b){ b.onclick=function(){
+    var tab = b.dataset.view; location.hash = tab === "shared" ? "shared" : tab + "/" + subFor(tab);
+  }; });
+  document.querySelectorAll("#subtabs button").forEach(function(b){ b.onclick=function(){
+    location.hash = TAB + "/" + b.dataset.sub;
+  }; });
+  window.addEventListener("hashchange", applyHash);
+  applyHash();
 })();
 </script>
 </body>
