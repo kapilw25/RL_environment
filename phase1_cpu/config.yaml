@@ -1,0 +1,43 @@
+# The ONE recipe: identical hyperparameters reused across the custom env and all 5 benchmarks.
+recipe:
+  algo: PPO
+  policy: MlpPolicy          # a custom CNN feature extractor is swapped in for image obs (MinAtar)
+  learning_rate: 0.00025
+  n_steps: 256               # rollout length per env
+  batch_size: 256
+  n_epochs: 4
+  gamma: 0.99
+  gae_lambda: 0.95
+  ent_coef: 0.01
+  vf_coef: 0.5
+  max_grad_norm: 0.5
+  n_envs: 8                  # parallel envs (CPU cores on the M1)
+  features_dim: 128          # output width of the MinAtar CNN
+
+eval:
+  eval_freq: 10000           # per-env steps between evaluations (the animated score series)
+  n_eval_episodes: 5    # lowered from 20 to speed each run so it fits the ~15-20 min window; keeps the 200-point curve grid (only per-checkpoint eval noise increases; the results table uses evaluate.py's separate 30-episode eval)
+  save_freq: 20000           # per-env steps between policy checkpoints (for gameplay replay)
+
+run:
+  seeds: [0, 1, 2]
+  timesteps_fast: 500000     # fast-demo budget per game
+  timesteps_full: 5000000    # full-baseline budget per game (optional overnight)
+  timesteps_smoke_grid: 100000   # GridWorld needs ~100k for PPO to reach the optimal path
+  timesteps_smoke_minatar: 50000
+
+# Primary benchmark suite: the 5 MinAtar games (published DQN baselines to approach).
+games:
+  - {id: "MinAtar/Breakout-v1",      baseline: 27.1, random: 0.5}
+  - {id: "MinAtar/Freeway-v1",       baseline: 55.9, random: 0.0}
+  - {id: "MinAtar/Asterix-v1",       baseline: 13.6, random: 0.5}
+  - {id: "MinAtar/Seaquest-v1",      baseline: 38.0, random: 0.0}
+  - {id: "MinAtar/SpaceInvaders-v1", baseline: 188.0, random: 2.5}
+
+# Fallback suite (classic control, dependency-light, no box2d) if MinAtar is unavailable.
+fallback_games:
+  - {id: "CartPole-v1",             baseline: 475.0,  random: 22.0}
+  - {id: "Acrobot-v1",              baseline: -85.0,  random: -500.0}
+  - {id: "MountainCar-v0",          baseline: -110.0, random: -200.0}
+  - {id: "MountainCarContinuous-v0", baseline: 90.0,  random: -35.0}
+  - {id: "Pendulum-v1",             baseline: -150.0, random: -1200.0}

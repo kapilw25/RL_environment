@@ -1,0 +1,1 @@
+[{"phase": 2, "run": "grpo", "benchmark": "GSM8K", "step": 0, "value": 50.0, "seed": 0, "baseline": 50.0, "ghost": 50.0}, {"phase": 2, "run": "grpo", "benchmark": "GSM8K", "step": 500, "value": 50.0, "seed": 0, "baseline": 50.0, "ghost": 50.0}]

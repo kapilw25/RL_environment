@@ -1,0 +1,10 @@
+# Phase 2 (GPU): install the CUDA build of torch for your box FIRST (pytorch.org),
+# then the rest. Needs a CUDA GPU (RTX 6000 PRO). Does not run on the M1.
+transformers>=4.51
+trl>=0.15
+peft>=0.14
+accelerate>=1.2
+datasets>=3.0
+vllm>=0.7
+lm-eval>=0.4.5
+pyyaml>=6.0

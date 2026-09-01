@@ -1,0 +1,9 @@
+# Phase 1 (CPU) - Gymnasium + Stable-Baselines3 stack. Python 3.13, Apple M1, CPU only.
+stable-baselines3>=2.8.0
+gymnasium>=0.29.1,<2.0
+minatar
+tbparse>=0.0.9
+tensorboard>=2.14
+matplotlib>=3.7
+pyyaml>=6.0
+numpy>=1.24

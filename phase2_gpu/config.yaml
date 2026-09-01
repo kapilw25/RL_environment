@@ -1,0 +1,27 @@
+# Phase 2 recipe: GRPO + LoRA on a small LLM, verifiable math env, evaluated on 5 NLP benchmarks.
+model: Qwen/Qwen2.5-0.5B-Instruct
+
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules: all-linear
+
+grpo:                       # tune per TRL version / GPU; per_device_train_batch_size must be divisible by num_generations
+  learning_rate: 1.0e-5
+  num_generations: 8        # group size (completions per prompt)
+  per_device_train_batch_size: 8
+  gradient_accumulation_steps: 4
+  max_completion_length: 512   # note: trl 1.x dropped max_prompt_length (prompts are short here)
+  max_steps: 500
+  logging_steps: 1
+  save_steps: 100
+  bf16: true
+  use_vllm: true            # vLLM for fast rollouts; on a single GPU use colocate, or run `trl vllm-serve` separately
+
+data:
+  train_n: 2000             # total train problems to sample (split across the mix)
+  seed: 0
+  mix: [math, mc]           # verifiable skills: math (GSM8K) + mc (ARC-Challenge science)
+
+benchmarks: [gsm8k, mmlu, arc_challenge, hellaswag, truthfulqa]
