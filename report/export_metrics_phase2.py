@@ -54,11 +54,12 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=os.path.join(HERE, "metrics_phase2.json"))
     ap.add_argument("--max-step", type=int, default=500)
+    ap.add_argument("--table", default=None, help="also write a base/post/delta markdown table here")
     args = ap.parse_args()
 
     pre = load_results(os.path.join(P2, "results", "eval_pre"))
     post = load_results(os.path.join(P2, "results", "eval_post"))
-    rows, got = [], []
+    rows, got, table = [], [], []
     for task, name in BENCH.items():
         sp = score(pre, task)
         if sp is None:
@@ -68,11 +69,21 @@ def main():
         sp *= 100
         sq = sq * 100 if sq is not None else sp
         base = sp if sp > 0 else 1e-6
+        table.append((name, sp, sq))
         for step, val in [(0, sp), (args.max_step, sq)]:
             rows.append(dict(phase=2, run="grpo", benchmark=name, step=int(step),
                              value=round(val, 2), seed=0, baseline=round(base, 2), ghost=round(base, 2)))
     json.dump(rows, open(args.out, "w"))
     print(f"[export-p2] {len(rows)} rows for {got} -> {args.out}")
+
+    lines = ["| Benchmark | base (pre) | GRPO (post) | delta |", "|---|---|---|---|"]
+    for name, sp, sq in table:
+        lines.append(f"| {name} | {sp:.1f} | {sq:.1f} | {sq - sp:+.1f} |")
+    md = "\n".join(lines)
+    print(md)
+    if args.table:
+        open(args.table, "w").write(md + "\n")
+        print(f"[export-p2] table -> {args.table}")
 
 
 if __name__ == "__main__":

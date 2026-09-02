@@ -21,6 +21,8 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--smoke", action="store_true", help="tiny M1 smoke: CPU, vLLM off, bf16 off")
     p.add_argument("--outdir", default="results/grpo")
+    p.add_argument("--steps", type=int, default=None, help="override max_steps (e.g. a short GPU sanity gate)")
+    p.add_argument("--n", type=int, default=None, help="override train_n (number of problems to sample)")
     args = p.parse_args()
 
     cfg = yaml.safe_load(open(os.path.join(HERE, "config.yaml")))
@@ -34,12 +36,17 @@ def main():
                      max_completion_length=64, bf16=False, use_vllm=False, use_cpu=True)
         report = "none"
     else:
-        steps, n = g["max_steps"], d["train_n"]
+        steps = args.steps if args.steps is not None else g["max_steps"]
+        n = args.n if args.n is not None else d["train_n"]
+        use_vllm = g["use_vllm"]
+        env_vllm = os.environ.get("USE_VLLM")            # runbook can force vLLM off for a robust first run
+        if env_vllm is not None:
+            use_vllm = env_vllm.strip().lower() not in ("0", "false", "no", "")
         extra = dict(num_generations=g["num_generations"],
                      per_device_train_batch_size=g["per_device_train_batch_size"],
                      gradient_accumulation_steps=g["gradient_accumulation_steps"],
                      max_completion_length=g["max_completion_length"],
-                     bf16=g["bf16"], use_vllm=g["use_vllm"])
+                     bf16=g["bf16"], use_vllm=use_vllm)
         report = "tensorboard"
 
     train_ds = build_dataset("train", n, d["seed"], mix=mix)

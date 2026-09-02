@@ -145,21 +145,24 @@ cd docs && python3 -m http.server 8000     # then open http://localhost:8000/rep
 
 RL-fine-tune Qwen2.5-0.5B with **GRPO + LoRA** on a verifiable **multi-skill** env (GSM8K math + ARC science, rule-based verifier reward, RLVR), then evaluate on 5 public NLP benchmarks. Full run needs a **CUDA GPU (RTX 6000 PRO)**; a tiny smoke runs on the Mac.
 
+`runbook.sh` is the one command, unattended: **venv → torch (cu128, with a real GPU-kernel check) → deps → sanity gate → full GRPO train → pre/post eval on 5 benchmarks → export**, logging to `logs/phase2_runbook.log`. It aborts loudly on a torch/GPU arch mismatch (with the nightly-index fix) instead of failing deep in training. vLLM is off by default (HF rollouts, most robust first run); enable it with `USE_VLLM=1`.
+
 ```bash
 cd phase2_gpu
-python -m venv .venv && source .venv/bin/activate
-# install the CUDA build of torch first (pytorch.org), then:
-pip install -r requirements.txt
+./runbook.sh                   # ONE command: venv + torch(cu128) + deps + gate + full train + eval + export
 
-./run.sh                       # gated: sanity gate -> full train -> pre/post eval
-# or step by step:
-python train_grpo.py --smoke   # sanity gate: 50 GRPO steps on 100 problems
+# optional knobs:
+USE_VLLM=1 ./runbook.sh        # enable vLLM fast rollouts (default off = HF generation, most robust)
+LIMIT=100 ./runbook.sh         # quick 100-example eval slice instead of the full test sets
+SKIP_INSTALL=1 ./runbook.sh    # re-run without reinstalling (also SKIP_GATE / SKIP_TRAIN / SKIP_EVAL)
+
+# prefer to drive the pieces yourself (venv + deps already active)?
 python train_grpo.py           # full GRPO run -> LoRA adapter in results/grpo
 ./eval_harness.sh              # lm-eval base (pre) vs adapter (post) on the 5 tasks
-LIMIT=100 ./eval_harness.sh    # quick 100-example slice per task
+./run.sh                       # interactive variant with a human go/no-go gate
 ```
 
-Output: a 5-row `base (pre)` vs `GRPO (post)` table (GSM8K, MMLU, ARC-Challenge, HellaSwag, TruthfulQA) in `phase2_gpu/report_phase2.md`. `report/export_metrics_phase2.py` turns the lm-eval JSONs into `docs/metrics_phase2.json` for the replay viz's Phase 2 tab (`window.DATA_METRICS_P2`).
+Output: `runbook.sh` writes the 5-row `base (pre)` vs `GRPO (post)` table (GSM8K, MMLU, ARC-Challenge, HellaSwag, TruthfulQA) to `phase2_gpu/results/summary_table.md` (paste it into `report_phase2.md`), and the tidy series to `docs/metrics_phase2.json`, which lights up the replay viz's Phase 2 tab (`window.DATA_METRICS_P2`). Commit that JSON to publish the real numbers.
 
 **Smoke-test on a Mac (no GPU):**
 
@@ -175,7 +178,7 @@ The M1 GPU (MPS) runs the model for inference, but **vLLM is CUDA-only** and **l
 ## 🧭 Status and roadmap
 
 - ✅ **Phase 1 (CPU): complete.** Custom env + one PPO recipe + 5 MinAtar benchmarks above random, trained to 2M steps (44% to 78% of DQN on four of five). See `phase1_cpu/report_phase1.md`, `plans/v1_tracker.md`, and Figure E for the 500k-vs-2M gain.
-- 🔵 **Phase 2 (GPU): code built, not yet trained.** GRPO + LoRA on the verifiable math env, evaluated on 5 NLP benchmarks. Ready to run on the RTX box (see the Phase 2 section above).
+- 🔵 **Phase 2 (GPU): code built + M1-smoke-tested, not yet trained.** GRPO + LoRA on the verifiable multi-skill env, evaluated on 5 NLP benchmarks. One command (`phase2_gpu/runbook.sh`) runs it end to end on the RTX box (see the Phase 2 section above).
 
 ## 📁 Where things live
 
