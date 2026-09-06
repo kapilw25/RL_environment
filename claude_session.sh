@@ -155,7 +155,14 @@ while [ $# -gt 0 ]; do
             [ $# -gt 0 ] || { echo "Error: --host requires an SSH alias (from ~/.ssh/config)"; usage; exit 1; }
             SSH_HOST="$1" ;;
         -h|--help) usage; exit 0 ;;
-        *) echo "Unknown arg: $1"; usage; exit 1 ;;
+        *)
+            # bare token after a mode (not --relocate) is treated as the SSH alias
+            if [ -n "$MODE" ] && [ "$MODE" != "--relocate" ] && [ "${1#-}" = "$1" ]; then
+                SSH_HOST="$1"
+            else
+                echo "Unknown arg: $1"; usage; exit 1
+            fi
+            ;;
     esac
     shift
 done
