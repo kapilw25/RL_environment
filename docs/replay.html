@@ -223,6 +223,13 @@
     </section>
   </div>
 
+  <section class="card" id="cardP2Static" hidden>
+    <h2>📊 Phase 2 result . base vs GRPO (v1)</h2>
+    <div class="hint">A pre/post result is two points per benchmark, so a static comparison is the honest view (nothing meaningful to animate). Scores from lm-eval on 5 public benchmarks.</div>
+    <img src="P2_pre_post.png" alt="Phase 2 base vs GRPO per benchmark" style="width:100%;max-width:840px;border:1px solid #1e293b;border-radius:12px;display:block;margin-top:8px">
+    <div class="hint" style="margin-top:8px">Honest read: no material gain; GSM8K regressed 3.1 pts (likely a reward vs eval-format mismatch); the rest are within noise. Fix planned in <code>plans/v2.md</code>.</div>
+  </section>
+
   <section class="card" id="cardTheater">
     <h2 id="theaterTitle">Watch it play</h2>
     <div class="hint" id="theaterHint"></div>
@@ -540,7 +547,7 @@ function updateCurves(t){
     if(slice.some(d=>d.pct>=100)) crossed.add(n);
   });
   // toast when a new benchmark crosses 100% going forward
-  for(const n of crossed){ if(!prevCrossed.has(n)){ toast(n+(PD.phase===1?' matched its DQN baseline':' beat the base model')); } }
+  for(const n of crossed){ if(!prevCrossed.has(n) && PD.phase===1){ toast(n+' matched its DQN baseline'); } }
   prevCrossed=crossed;
 }
 let toastTimer=null;
@@ -873,6 +880,9 @@ requestAnimationFrame(gameLoop);
     document.getElementById("cardTheater").hidden = sub!=="watch";
     document.getElementById("cardAnatomy").hidden = sub!=="anatomy";
     document.getElementById("cardPhase2Data").hidden = sub!=="data";
+    var p2anim = (TAB==="phase2" && sub==="anim");
+    document.getElementById("cardP2Static").hidden = !p2anim;
+    if(p2anim){ document.querySelector(".stage").hidden = true; document.querySelector(".controls").hidden = true; }
     document.querySelectorAll("#subtabs button").forEach(function(b){ b.classList.toggle("on", b.dataset.sub===sub); });
   }
   function showMainTab(tab){
@@ -890,6 +900,7 @@ requestAnimationFrame(gameLoop);
       document.getElementById("cardTheater").hidden = true;
       document.getElementById("cardAnatomy").hidden = true;
       document.getElementById("cardPhase2Data").hidden = true;
+      document.getElementById("cardP2Static").hidden = true;
       if(sub) sub.textContent = live ? "Real-time GRPO training and pipeline status from the GPU box." : "The shared RL loop and pipeline behind both phases.";
       return;
     }
