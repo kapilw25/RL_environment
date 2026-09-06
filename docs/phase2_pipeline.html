@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 2 Pipeline</title>
+<style>
+  :root{
+    --bg:#0a0e16; --panel:#111828; --panel2:#0e1522; --line:#1e293b; --ink:#e7eefb; --muted:#8595ad;
+    --done:#10b981; --running:#3b82f6; --pending:#5b6b84; --blocked:#f59e0b; --failed:#ef4444; --manual:#a855f7;
+    --reward:#3b82f6; --correct:#10b981; --format:#a855f7; --entropy:#22d3ee; --loss:#f59e0b; --len:#ec4899; --grad:#84cc16;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 600px at 20% -10%,#122036 0,var(--bg) 55%);color:var(--ink);
+       font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;padding:22px 22px 60px}
+  h1{margin:0;font-size:19px;letter-spacing:.2px}
+  h2{font-size:14.5px;margin:0 0 4px;letter-spacing:.2px}
+  .sub{color:var(--muted);font-size:12.5px;margin-top:3px}
+  header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:16px}
+  .live{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--done);animation:beat 1.6s infinite}
+  .dot.stale{background:var(--blocked);animation:none}
+  @keyframes beat{0%{box-shadow:0 0 0 0 rgba(16,185,129,.55)}70%{box-shadow:0 0 0 8px rgba(16,185,129,0)}100%{box-shadow:0 0 0 0 rgba(16,185,129,0)}}
+  .bar{height:10px;border-radius:999px;background:#0c1524;border:1px solid var(--line);overflow:hidden;margin-top:6px;min-width:220px}
+  .bar>span{display:block;height:100%;width:0;background:linear-gradient(90deg,#10b981,#3b82f6);transition:width .6s ease}
+  .ovwrap{min-width:240px}
+  .ovtop{display:flex;justify-content:space-between;font-size:12px;color:var(--muted)}
+
+  .legend{display:flex;gap:8px 14px;flex-wrap:wrap;margin:2px 0 20px;font-size:12px;color:var(--muted)}
+  .lg{display:flex;align-items:center;gap:6px}
+  .sw{width:11px;height:11px;border-radius:3px}
+
+  .flow{display:flex;align-items:stretch;gap:0;flex-wrap:wrap;row-gap:22px}
+  .node{position:relative;flex:1 1 148px;min-width:148px;max-width:220px;background:linear-gradient(180deg,var(--panel),var(--panel2));
+        border:1px solid var(--line);border-radius:14px;padding:12px 12px 13px;overflow:hidden}
+  .node .accent{position:absolute;inset:0 auto 0 0;width:4px;background:var(--pending)}
+  .toprow{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .ico{font-size:19px;line-height:1}
+  .badge{font-size:9.5px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;padding:3px 7px;border-radius:999px;color:#04121e;background:var(--pending)}
+  .label{font-weight:650;margin-top:8px;font-size:13px}
+  .detail{color:var(--muted);font-size:11px;margin-top:3px;min-height:15px}
+  .metric{margin-top:6px;font-size:11.5px;color:#bcd3f5;font-variant-numeric:tabular-nums}
+  .mini{height:6px;border-radius:999px;background:#0c1524;border:1px solid var(--line);overflow:hidden;margin-top:8px}
+  .mini>span{display:block;height:100%;width:0;background:var(--running);transition:width .6s ease}
+  .conn{flex:0 0 24px;align-self:center;height:3px;border-radius:2px;background:#22304a;min-width:16px}
+  .conn.flow{background:linear-gradient(90deg,var(--done),var(--running));background-size:200% 100%;animation:slide 1s linear infinite}
+  @keyframes slide{0%{background-position:120% 0}100%{background-position:-20% 0}}
+  @media(max-width:760px){.conn{display:none}.node{max-width:none;flex-basis:100%}}
+
+  .s-done .accent,.s-done .badge{background:var(--done)}
+  .s-running .accent{background:var(--running)} .s-running .badge{background:var(--running);color:#eaf2ff}
+  .s-pending .accent{background:var(--pending)} .s-pending .badge{background:var(--pending);color:#eaf2ff}
+  .s-blocked .accent,.s-blocked .badge{background:var(--blocked)}
+  .s-failed .accent{background:var(--failed)} .s-failed .badge{background:var(--failed);color:#fff}
+  .s-manual .accent{background:var(--manual)} .s-manual .badge{background:var(--manual);color:#fff}
+  .s-running{border-color:#2c4a7a;animation:glow 1.8s ease-in-out infinite}
+  @keyframes glow{0%,100%{box-shadow:0 0 0 0 rgba(59,130,246,0)}50%{box-shadow:0 0 22px -2px rgba(59,130,246,.45)}}
+  .s-running .scan{position:absolute;left:0;right:0;top:0;height:2px;background:linear-gradient(90deg,transparent,var(--running),transparent);animation:scan 1.6s linear infinite}
+  @keyframes scan{0%{transform:translateY(0);opacity:.9}100%{transform:translateY(calc(100% - 2px));opacity:.2}}
+  .benches{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:9px}
+  .bchip{display:flex;justify-content:space-between;gap:4px;font-size:10.5px;padding:4px 6px;border-radius:7px;background:#0c1524;border:1px solid var(--line)}
+  .bchip .nm{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .bchip .vl{font-weight:700;font-variant-numeric:tabular-nums}
+  .bchip.b-done{border-color:rgba(16,185,129,.5)} .bchip.b-done .vl{color:var(--done)}
+  .bchip.b-running{border-color:rgba(59,130,246,.6)} .bchip.b-running .vl{color:var(--running)}
+  .bchip.b-pending .vl{color:var(--pending)}
+  .bchip .brow{display:flex;justify-content:space-between;gap:4px}
+  .bchip .bbar{height:3px;border-radius:2px;background:#0a1120;margin-top:4px;overflow:hidden}
+  .bchip .bbar>span{display:block;height:100%;background:var(--running);width:0;transition:width .5s ease}
+
+  .card{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:16px;padding:16px 18px;margin-top:22px}
+  .engine{border-color:#2a3b57;box-shadow:0 0 0 1px rgba(59,130,246,.12) inset}
+  .callout{background:#0c1626;border:1px solid #274063;border-left:4px solid var(--running);border-radius:10px;padding:10px 13px;margin:10px 0 14px;font-size:13px}
+  .engine-grid{display:grid;grid-template-columns:minmax(280px,1fr) minmax(300px,1.3fr);gap:18px}
+  @media(max-width:820px){.engine-grid{grid-template-columns:1fr}}
+  table.map{border-collapse:collapse;width:100%;font-size:12px}
+  table.map td{border:1px solid var(--line);padding:6px 8px;vertical-align:top}
+  table.map td:first-child{color:#cfe0fb;white-space:nowrap;width:1%;font-weight:600}
+  table.map td:last-child{color:var(--muted)}
+
+  .tiles{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+  .tile{background:#0c1524;border:1px solid var(--line);border-radius:10px;padding:7px 11px;min-width:96px}
+  .tile .t{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  .tile .v{font-size:17px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:1px}
+  .chartbox{background:#0b1320;border:1px solid var(--line);border-radius:10px;padding:8px 8px 4px}
+  .chartbox .ct{font-size:11px;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:2px}
+  .charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+  .clegend{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--muted);margin-top:6px}
+  .cl{display:flex;align-items:center;gap:5px}
+  .cl i{width:14px;height:3px;border-radius:2px;display:inline-block}
+
+  .erow{display:grid;grid-template-columns:128px 76px 1fr 210px;gap:12px;align-items:center;padding:9px 12px;border:1px solid var(--line);border-radius:10px;background:#0c1524;margin-bottom:7px}
+  .erow .ename{font-weight:650;font-size:13px}
+  .erow .epill{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;text-align:center;padding:3px 6px;border-radius:999px;background:var(--pending);color:#04121e}
+  .erow .eprog{height:8px;border-radius:999px;background:#0a1120;overflow:hidden}
+  .erow .eprog>span{display:block;height:100%;width:0;background:var(--running);transition:width .6s ease}
+  .erow .emeta{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;text-align:right}
+  .erow.e-done .epill{background:var(--done)} .erow.e-done .eprog>span{background:var(--done)}
+  .erow.e-running{border-color:#2c4a7a;animation:glow 1.8s ease-in-out infinite} .erow.e-running .epill{background:var(--running);color:#eaf2ff}
+  .erow.e-running .eprog>span{background:linear-gradient(90deg,var(--running),#7aa2ff);background-size:200% 100%;animation:slide 1s linear infinite}
+  .erow.e-pending{opacity:.7} .erow.e-pending .epill{background:var(--pending);color:#eaf2ff}
+  .erow.e-failed .epill{background:var(--failed);color:#fff}
+  @media(max-width:640px){.erow{grid-template-columns:1fr;gap:5px}.erow .emeta{text-align:left}}
+  .gloss{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px}
+  .gitem{background:#0c1524;border:1px solid var(--line);border-radius:10px;padding:9px 12px}
+  .gitem b{font-size:12.5px} .gitem .gd{color:var(--muted);font-size:11.5px;margin-top:2px}
+  .gitem .gi{font-size:15px;margin-right:5px}
+  .foot{color:var(--muted);font-size:11.5px;margin-top:26px}
+  code{background:#0c1524;border:1px solid var(--line);border-radius:5px;padding:1px 5px;font-size:11.5px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Phase 2 Pipeline <span style="color:var(--muted);font-weight:400">GRPO + LoRA on Qwen2.5-0.5B</span></h1>
+    <div class="sub">RTX 4080 SUPER (16 GB) . verifiable multi-skill RLVR . live status</div>
+  </div>
+  <div class="ovwrap">
+    <div class="ovtop"><span class="live"><span class="dot" id="dot"></span><span id="ago">connecting...</span></span><span id="ovpct">0%</span></div>
+    <div class="bar"><span id="ovbar"></span></div>
+  </div>
+</header>
+
+<div class="legend">
+  <span class="lg"><span class="sw" style="background:var(--done)"></span>completed</span>
+  <span class="lg"><span class="sw" style="background:var(--running)"></span>running</span>
+  <span class="lg"><span class="sw" style="background:var(--pending)"></span>pending</span>
+  <span class="lg"><span class="sw" style="background:var(--blocked)"></span>blocked</span>
+  <span class="lg"><span class="sw" style="background:var(--failed)"></span>failed</span>
+  <span class="lg"><span class="sw" style="background:var(--manual)"></span>manual</span>
+</div>
+
+<div class="flow" id="flow"></div>
+
+<!-- EVAL DETAIL: 5 benchmarks stacked -->
+<section class="card" id="cardEvalDetail">
+  <h2>&#129515; Eval detail . 5 public benchmarks (pre vs post)</h2>
+  <div class="sub" id="evalSub">lm-eval scores base (pre) then GRPO (post). Results land per pass, so a row turns green only when its pass finishes.</div>
+  <div id="evalRows"></div>
+</section>
+
+<!-- RL ENVIRONMENT: the engine -->
+<section class="card engine">
+  <h2>&#129504; The RL environment . the engine of this project</h2>
+  <div class="callout">
+    <b>How this differs from straightforward training + evaluation:</b> the model is never shown a correct answer to copy.
+    It <b>generates</b> its own answers and a <b>rule-based verifier scores each one</b> (reward 1 if the final number/letter is right,
+    plus a small format reward); GRPO then pushes the policy toward the higher-reward answers. The reward IS the environment, and the
+    5 benchmarks test whether that reward-driven skill <b>transfers</b>, not whether it memorized labels.
+  </div>
+  <div class="engine-grid">
+    <div>
+      <table class="map">
+        <tr><td>&#128309; State</td><td>the problem prompt (a GSM8K math or ARC science question)</td></tr>
+        <tr><td>&#128993; Action</td><td>the next token the policy emits (over the rollout it becomes the full answer)</td></tr>
+        <tr><td>&#128994; Reward</td><td><b>rule-based verifier</b>: 1.0 if the extracted answer is correct, else 0.0, plus a small format reward</td></tr>
+        <tr><td>&#128995; Transition</td><td>append the chosen token to the context (deterministic)</td></tr>
+        <tr><td>&#128992; Episode</td><td>one problem: read prompt, generate to a stop token, then score once</td></tr>
+        <tr><td>&#128308; Task</td><td>a multi-skill mix: GSM8K (math) + ARC-Challenge (science), 2000 problems</td></tr>
+      </table>
+    </div>
+    <div>
+      <div class="tiles" id="rewardTiles"></div>
+      <div class="chartbox">
+        <div class="ct"><span>Reward signal over training steps (the env teaching the model)</span><span id="rewardHead"></span></div>
+        <div id="rewardChart"></div>
+        <div class="clegend">
+          <span class="cl"><i style="background:var(--reward)"></i>reward (total)</span>
+          <span class="cl"><i style="background:var(--correct)"></i>correct</span>
+          <span class="cl"><i style="background:var(--format)"></i>format</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- TRAINING CHARTS -->
+<section class="card">
+  <h2>&#128200; GRPO training (live) . tensorboard-style</h2>
+  <div class="sub" style="margin-bottom:10px">Parsed live from the training log every 10s (logging_steps=1). Full TensorBoard event files are also written to <code>phase2_gpu/results/grpo/runs/</code>.</div>
+  <div class="charts" id="trainCharts"></div>
+</section>
+
+<!-- GLOSSARY -->
+<section class="card">
+  <h2>&#128203; What each stage does</h2>
+  <div class="gloss">
+    <div class="gitem"><b><span class="gi">&#128230;</span>Install deps</b><div class="gd">Set up the GPU env: torch 2.11+cu128 (already on the box) plus trl / peft / lm-eval / tensorboard.</div></div>
+    <div class="gitem"><b><span class="gi">&#129514;</span>Sanity gate</b><div class="gd">A short GRPO run to prove the loop trains and the reward actually moves before committing to the long run.</div></div>
+    <div class="gitem"><b><span class="gi">&#127947;</span>GRPO train (500)</b><div class="gd">The RL loop itself: generate answers, verifier scores them, GRPO updates the LoRA policy toward higher reward. 500 optimizer steps.</div></div>
+    <div class="gitem"><b><span class="gi">&#129515;</span>Eval (5 benchmarks)</b><div class="gd">lm-eval scores base (pre) vs GRPO (post) on GSM8K, MMLU, ARC-Challenge, HellaSwag, TruthfulQA. Tests transfer of the reward-driven skill.</div></div>
+    <div class="gitem"><b><span class="gi">&#128202;</span>Export metrics</b><div class="gd">Turn the eval JSONs into a tidy series + a base/post/delta table for the report and the viz.</div></div>
+    <div class="gitem"><b><span class="gi">&#127912;</span>Wire replay.html</b><div class="gd">Inject the real numbers into the main dashboard's Phase 2 tab (window.DATA_METRICS_P2).</div></div>
+    <div class="gitem"><b><span class="gi">&#128640;</span>Commit + push</b><div class="gd">Publish the adapter-free results (metrics + report) to GitHub. Manual, you run git_push.sh.</div></div>
+  </div>
+</section>
+
+<div class="foot" id="foot"></div>
+
+<script>
+var STATUSES={done:1,running:1,pending:1,blocked:1,failed:1,manual:1};
+var FALLBACK={updated_ts:0,order:["install","sanity","full_train","eval","export","wire_viz","push"],
+  overall:{done:0,total:6,pct:0},series:[],
+  nodes:{install:{icon:"📦",label:"Install deps",status:"pending",detail:""},
+    sanity:{icon:"🧪",label:"Sanity gate",status:"pending",detail:""},
+    full_train:{icon:"🏋️",label:"GRPO train (500)",status:"pending",detail:""},
+    eval:{icon:"🧫",label:"Eval (5 benchmarks)",status:"pending",detail:"",benchmarks:{}},
+    export:{icon:"📊",label:"Export metrics",status:"pending",detail:""},
+    wire_viz:{icon:"🎨",label:"Wire replay.html",status:"pending",detail:""},
+    push:{icon:"🚀",label:"Commit + push",status:"manual",detail:""}}};
+var last=FALLBACK;
+
+function esc(s){return String(s==null?"":s).replace(/[&<>]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;"}[c];});}
+
+function nodeCard(id,n){
+  var st=STATUSES[n.status]?n.status:"pending";
+  var h='<div class="node s-'+st+'"><div class="accent"></div>'+(st==="running"?'<div class="scan"></div>':'');
+  h+='<div class="toprow"><span class="ico">'+(n.icon||"")+'</span><span class="badge">'+esc(st)+'</span></div>';
+  h+='<div class="label">'+esc(n.label||id)+'</div><div class="detail">'+esc(n.detail||"")+'</div>';
+  if(typeof n.progress==="number") h+='<div class="mini"><span style="width:'+Math.max(0,Math.min(100,n.progress))+'%"></span></div>';
+  if(n.metric) h+='<div class="metric">'+esc(n.metric)+'</div>';
+  // per-benchmark detail now lives in the full-width "Eval detail" panel below the flow
+  return h+'</div>';
+}
+
+function svgChart(series,keys,h){
+  var w=320,pad={l:36,r:8,t:8,b:16},iw=w-pad.l-pad.r,ih=h-pad.t-pad.b;
+  var pts=series.filter(function(p){return p.step!=null;});
+  if(pts.length<2) return '<svg viewBox="0 0 '+w+' '+h+'" width="100%" height="'+h+'"><text x="'+(w/2)+'" y="'+(h/2)+'" fill="#5b6b84" font-size="12" text-anchor="middle">waiting for data...</text></svg>';
+  var xs=pts.map(function(p){return p.step;}),xmin=Math.min.apply(null,xs),xmax=Math.max.apply(null,xs);if(xmax===xmin)xmax=xmin+1;
+  var vals=[];keys.forEach(function(kk){pts.forEach(function(p){if(p[kk.k]!=null&&isFinite(p[kk.k]))vals.push(p[kk.k]);});});
+  if(!vals.length) return '<svg viewBox="0 0 '+w+' '+h+'" width="100%" height="'+h+'"></svg>';
+  var ymin=Math.min.apply(null,vals),ymax=Math.max.apply(null,vals);if(ymax===ymin){ymax+=1;ymin-=1;}
+  var m=(ymax-ymin)*0.12;ymin-=m;ymax+=m;
+  function X(s){return pad.l+(s-xmin)/(xmax-xmin)*iw;}
+  function Y(v){return pad.t+(1-(v-ymin)/(ymax-ymin))*ih;}
+  var svg='<svg viewBox="0 0 '+w+' '+h+'" width="100%" height="'+h+'" preserveAspectRatio="none">';
+  [0,.5,1].forEach(function(f){var y=pad.t+f*ih;svg+='<line x1="'+pad.l+'" x2="'+(w-pad.r)+'" y1="'+y+'" y2="'+y+'" stroke="#182338" stroke-width="1"/>';});
+  keys.forEach(function(kk){
+    var pp=pts.filter(function(p){return p[kk.k]!=null&&isFinite(p[kk.k]);});
+    if(pp.length<2) return;
+    var d=pp.map(function(p){return X(p.step).toFixed(1)+','+Y(p[kk.k]).toFixed(1);}).join(' ');
+    svg+='<polyline fill="none" stroke="'+kk.c+'" stroke-width="1.7" stroke-linejoin="round" points="'+d+'"/>';
+    var lastp=pp[pp.length-1];
+    svg+='<circle cx="'+X(lastp.step).toFixed(1)+'" cy="'+Y(lastp[kk.k]).toFixed(1)+'" r="2.6" fill="'+kk.c+'"/>';
+  });
+  svg+='<text x="2" y="'+(pad.t+7)+'" fill="#5b6b84" font-size="9">'+ymax.toFixed(2)+'</text>';
+  svg+='<text x="2" y="'+(h-pad.b+9)+'" fill="#5b6b84" font-size="9">'+ymin.toFixed(2)+'</text>';
+  svg+='<text x="'+pad.l+'" y="'+(h-2)+'" fill="#5b6b84" font-size="9">step '+xmin+'</text>';
+  svg+='<text x="'+(w-pad.r)+'" y="'+(h-2)+'" fill="#5b6b84" font-size="9" text-anchor="end">'+xmax+'</text>';
+  return svg+'</svg>';
+}
+
+var TRAIN=[{t:"Reward",k:"reward",c:"var(--reward)"},{t:"Loss",k:"loss",c:"var(--loss)"},
+  {t:"Entropy",k:"entropy",c:"var(--entropy)"},{t:"Completion length (tok)",k:"clen",c:"var(--len)"},
+  {t:"Grad norm",k:"gnorm",c:"var(--grad)"}];
+
+function fmt(v){return v==null||!isFinite(v)?"-":(Math.abs(v)>=100?v.toFixed(0):v.toFixed(3));}
+
+function renderCharts(series){
+  series=series||[];
+  var lastp=series.length?series[series.length-1]:{};
+  // reward tiles
+  var tiles=[["reward",lastp.reward,"var(--reward)"],["correct",lastp.rc,"var(--correct)"],["format",lastp.rf,"var(--format)"],["entropy",lastp.entropy,"var(--entropy)"]];
+  document.getElementById("rewardTiles").innerHTML=tiles.map(function(t){
+    return '<div class="tile"><div class="t">'+t[0]+'</div><div class="v" style="color:'+t[2]+'">'+fmt(t[1])+'</div></div>';}).join("");
+  document.getElementById("rewardHead").textContent = series.length? ("step "+lastp.step) : "";
+  document.getElementById("rewardChart").innerHTML=svgChart(series,
+    [{k:"reward",c:getComputedStyle(document.documentElement).getPropertyValue("--reward")},
+     {k:"rc",c:getComputedStyle(document.documentElement).getPropertyValue("--correct")},
+     {k:"rf",c:getComputedStyle(document.documentElement).getPropertyValue("--format")}],150);
+  // train grid
+  var css=getComputedStyle(document.documentElement);
+  document.getElementById("trainCharts").innerHTML=TRAIN.map(function(c){
+    var col=css.getPropertyValue(c.c.replace("var(","").replace(")","")).trim()||c.c;
+    return '<div class="chartbox"><div class="ct"><span>'+c.t+'</span><span style="color:'+col+'">'+fmt(lastp[c.k])+'</span></div>'
+      + svgChart(series,[{k:c.k,c:col}],120)+'</div>';
+  }).join("");
+}
+
+function evalRow(name,b){
+  b=b||{status:"pending"}; var st=STATUSES[b.status]?b.status:"pending";
+  var prog=(typeof b.prog==="number")?b.prog:(st==="done"?100:0);
+  var right;
+  if(st==="done"){
+    var pre=(b.pre!=null?b.pre:null), post=(b.post!=null?b.post:null);
+    var d=(pre!=null&&post!=null)?(post-pre):null;
+    right='pre '+(pre!=null?pre:'-')+' / post '+(post!=null?post:'-')+(d!=null?' <b style="color:'+(d>=0?'var(--done)':'var(--failed)')+'">'+(d>=0?'+':'')+d.toFixed(1)+'</b>':'');
+  } else if(st==="running"){
+    right=(b.eta?'ETA '+esc(b.eta):'running')+(typeof b.prog==="number"?' . '+b.prog+'%':'');
+  } else { right='pending'; }
+  return '<div class="erow e-'+st+'"><span class="ename">'+esc(name)+'</span><span class="epill">'+st+'</span>'
+    +'<div class="eprog"><span style="width:'+Math.max(0,Math.min(100,prog))+'%"></span></div>'
+    +'<span class="emeta">'+right+'</span></div>';
+}
+function renderEvalDetail(ev){
+  ev=ev||{}; var b=ev.benchmarks||{};
+  var order=["GSM8K","MMLU","ARC-Challenge","HellaSwag","TruthfulQA"];
+  var el=document.getElementById("evalRows"); if(el) el.innerHTML=order.map(function(n){return evalRow(n,b[n]);}).join("");
+  var sub=document.getElementById("evalSub"); if(sub && ev.detail) sub.textContent=ev.detail;
+}
+function render(data){
+  var order=data.order||FALLBACK.order,nodes=data.nodes||{},flow=document.getElementById("flow"),html="";
+  for(var i=0;i<order.length;i++){
+    var id=order[i],n=nodes[id]||{status:"pending"};
+    html+=nodeCard(id,n);
+    if(i<order.length-1){var nx=nodes[order[i+1]]||{};var f=(n.status==="done"&&nx.status==="running")||nx.status==="running";html+='<div class="conn'+(f?" flow":"")+'"></div>';}
+  }
+  flow.innerHTML=html;
+  var ov=data.overall||{done:0,total:6,pct:0};
+  document.getElementById("ovbar").style.width=(ov.pct||0)+"%";
+  document.getElementById("ovpct").textContent=(ov.pct||0)+"% . "+(ov.done||0)+"/"+(ov.total||0)+" stages";
+  renderCharts(data.series);
+  renderEvalDetail(nodes.eval);
+  document.getElementById("foot").innerHTML='Auto-refreshes every 5s from <code>phase2_status.json</code> (regenerated every 10s by <code>report/phase2_status.py</code>). Serve this folder over http for live updates.';
+}
+
+function tickAgo(){
+  var el=document.getElementById("ago"),dot=document.getElementById("dot");
+  if(!last.updated_ts){el.textContent="waiting for status.json";dot.className="dot stale";return;}
+  var s=Math.max(0,Math.floor(Date.now()/1000)-last.updated_ts);
+  el.textContent="updated "+(s<60?s+"s":Math.floor(s/60)+"m "+(s%60)+"s")+" ago";
+  dot.className=s>45?"dot stale":"dot";
+}
+function poll(){
+  fetch("phase2_status.json?t="+Date.now(),{cache:"no-store"})
+    .then(function(r){if(!r.ok)throw 0;return r.json();})
+    .then(function(d){last=d;render(d);}).catch(function(){});
+}
+render(last);poll();setInterval(poll,5000);setInterval(tickAgo,1000);
+</script>
+</body>
+</html>

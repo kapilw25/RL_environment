@@ -180,6 +180,7 @@
       <button data-view="shared">🔧 Shared infra</button>
       <button data-view="phase1" class="on">🕹️ Phase 1 . RL agent</button>
       <button data-view="phase2">🧠 Phase 2 . LLM GRPO</button>
+      <button data-view="live">🔴 Live pipeline</button>
     </div>
   </header>
 
@@ -209,6 +210,7 @@
     <section class="card" id="cardCurves">
       <h2>Learning curves . % of baseline</h2>
       <div class="hint" id="curvesHint"></div>
+      <div id="p2pendingBanner" hidden style="margin:2px 0 8px;padding:8px 11px;border-radius:9px;background:#2a2410;border:1px solid #5a4a1c;border-left:4px solid #f59e0b;color:#f6d58a;font-size:12px">⏳ Phase 2 not evaluated yet. These are flat 100% placeholders (= the base model), not real results. Real base-vs-post scores land after the Eval step; watch live training on the 🔴 Live pipeline tab.</div>
       <div id="curves"></div>
       <div class="legend" id="legend"></div>
       <div class="toast" id="toast"></div>
@@ -314,12 +316,16 @@
     </div>
   </section>
 
+  <section class="card" id="cardLive" hidden>
+    <h2>🔴 Live pipeline . real-time GRPO training + eval status</h2>
+    <div class="hint">Live from the GPU box, updating every ~10s. On the published site (no box attached) this shows the pipeline shape without live data; serve the folder on the box for the live feed.</div>
+    <iframe src="phase2_pipeline.html" title="Phase 2 live pipeline" style="width:100%;height:calc(100vh - 150px);min-height:900px;border:1px solid #1e293b;border-radius:14px;background:#0a0e16"></iframe>
+  </section>
+
   <footer>
-    Mock data, wired to the exact tidy schema
-    <code>{phase, run, benchmark, step, value, seed, baseline, ghost}</code>.
-    Replace <code>genMetrics()</code> with your <code>metrics.json</code> from
-    <code>report/export_metrics.py</code> and it renders your real runs.
-    Panel A / B read <code>metrics[]</code>; the gameplay canvas and LLM rollouts are auxiliary mock assets.
+    Phase 1 shows <b>real</b> results (from <code>report/export_metrics.py</code>). Phase 2 benchmark scores are
+    <b>pending the Eval step</b> and drawn as flat 100% placeholders until then; watch live training on the
+    <b>Live pipeline</b> tab. Schema: <code>{phase, run, benchmark, step, value, seed, baseline, ghost}</code>.
   </footer>
 </div>
 
@@ -390,13 +396,22 @@ function genMetrics(){
 const _mock = genMetrics();
 const _realP1 = (window.DATA_METRICS_P1 && window.DATA_METRICS_P1.length) ? window.DATA_METRICS_P1 : null;
 const _realP2 = (window.DATA_METRICS_P2 && window.DATA_METRICS_P2.length) ? window.DATA_METRICS_P2 : null;
-// use real per-phase data when injected, else the mock for that phase
-const metrics = (_realP1 || _mock.filter(d => d.phase === 1)).concat(_realP2 || _mock.filter(d => d.phase === 2));
+// Phase 2 carries NO fake numbers: until real eval rows are injected, draw flat 100% placeholders (= base model).
+function phase2Pending(){
+  const out=[];
+  NLP.forEach(function(b){ [0,500].forEach(function(s){
+    out.push({phase:2,run:"grpo",benchmark:b.name,step:s,value:1,seed:0,baseline:1,ghost:1});
+  });});
+  return out;
+}
+window.__P2_PENDING = !_realP2;
+// Phase 1 is real; Phase 2 uses real rows if injected, else the flat pending placeholder (never mock).
+const metrics = (_realP1 || _mock.filter(d => d.phase === 1)).concat(_realP2 || phase2Pending());
 
 // ---- aggregate the tidy array into per-phase drawable series --------------
 function colorOf(phase,name){return (phase===1?GAMES:NLP).find(x=>x.name===name).color;}
-function aggregate(phase){
-  const rows=metrics.filter(d=>d.phase===phase);
+function aggregate(phase, src){
+  const rows=(src||metrics).filter(d=>d.phase===phase);
   const byBench=d3.group(rows,d=>d.benchmark);
   const benchmarks=[...byBench.keys()];
   let steps=null; const series={};
@@ -460,6 +475,7 @@ function setPhase(p){
     ? '100% = matched the published DQN baseline. Bands = spread across seeds; dotted = ghost run (Open RL Benchmark).'
     : '100% = the base model before RL. Rising above 100% means the fine-tune beats the base. Dotted = published reference.';
   $('#raceHint').textContent = 'Score as % of baseline. Bars grow and reorder as training proceeds.';
+  var _pb=document.getElementById('p2pendingBanner'); if(_pb) _pb.hidden = !(p===2 && window.__P2_PENDING);
   $('#theaterTitle').textContent = p===1 ? 'Watch it play . policy rollout' : 'Watch it answer . before vs after';
   $('#theaterHint').textContent = p===1
     ? 'Schematic greedy rollout at the current checkpoint. Scrub back for a clumsy agent, forward for a skilled one.'
@@ -861,19 +877,20 @@ requestAnimationFrame(gameLoop);
   }
   function showMainTab(tab){
     TAB = tab;
-    var shared = tab === "shared", p2 = tab === "phase2";
+    var shared = tab === "shared", p2 = tab === "phase2", live = tab === "live";
     document.getElementById("cardSharedInfra").hidden = !shared;
     document.getElementById("cardCompare").hidden = !shared;
-    document.getElementById("subtabs").hidden = shared;
+    document.getElementById("cardLive").hidden = !live;
+    document.getElementById("subtabs").hidden = shared || live;
     document.querySelectorAll("#maintabs button").forEach(function(b){ b.classList.toggle("on", b.dataset.view===tab); });
     var sub = document.getElementById("sub");
-    if(shared){
+    if(shared || live){
       document.querySelector(".controls").hidden = true;
       document.querySelector(".stage").hidden = true;
       document.getElementById("cardTheater").hidden = true;
       document.getElementById("cardAnatomy").hidden = true;
       document.getElementById("cardPhase2Data").hidden = true;
-      if(sub) sub.textContent = "The shared RL loop and pipeline behind both phases.";
+      if(sub) sub.textContent = live ? "Real-time GRPO training and pipeline status from the GPU box." : "The shared RL loop and pipeline behind both phases.";
       return;
     }
     var p = p2 ? 2 : 1;
@@ -888,21 +905,41 @@ requestAnimationFrame(gameLoop);
   function applyHash(){
     var h = (location.hash||"").replace(/^#/,""), pp = h.split("/");
     var tab = pp[0], sub = pp[1];
-    if(["shared","phase1","phase2"].indexOf(tab) < 0) tab = "phase1";
-    if(tab!=="shared" && VALID[tab].indexOf(sub) < 0) sub = VALID[tab].indexOf(SUB) >= 0 ? SUB : "anim";
+    if(["shared","phase1","phase2","live"].indexOf(tab) < 0) tab = "phase1";
+    if(tab!=="shared" && tab!=="live" && VALID[tab].indexOf(sub) < 0) sub = VALID[tab].indexOf(SUB) >= 0 ? SUB : "anim";
     if(tab !== TAB){ if(sub) SUB = sub; showMainTab(tab); }
-    else if(tab !== "shared" && sub && sub !== SUB){ showSub(sub); }
-    var canon = TAB === "shared" ? "#shared" : "#" + TAB + "/" + SUB;
+    else if(tab !== "shared" && tab !== "live" && sub && sub !== SUB){ showSub(sub); }
+    var canon = (TAB === "shared" || TAB === "live") ? "#" + TAB : "#" + TAB + "/" + SUB;
     if(location.hash !== canon){ try{ history.replaceState(null, "", canon); }catch(e){} }
   }
   document.querySelectorAll("#maintabs button").forEach(function(b){ b.onclick=function(){
-    var tab = b.dataset.view; location.hash = tab === "shared" ? "shared" : tab + "/" + subFor(tab);
+    var tab = b.dataset.view; location.hash = (tab === "shared" || tab === "live") ? tab : tab + "/" + subFor(tab);
   }; });
   document.querySelectorAll("#subtabs button").forEach(function(b){ b.onclick=function(){
     location.hash = TAB + "/" + b.dataset.sub;
   }; });
   window.addEventListener("hashchange", applyHash);
   applyHash();
+})();
+</script>
+<script>
+/* Live Phase 2: poll metrics_phase2.json; when real pre/post rows arrive, redraw the bar race. */
+(function(){
+  var sig="";
+  function pull(){
+    fetch("metrics_phase2.json?t="+Date.now(),{cache:"no-store"})
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(rows){
+        if(!rows || !rows.length) return;
+        var s = JSON.stringify(rows); if(s===sig) return; sig=s;
+        try{
+          window.DATA_METRICS_P2 = rows; window.__P2_PENDING = false;
+          if(typeof AGG!=="undefined" && typeof aggregate==="function") AGG[2] = aggregate(2, rows);
+          if(typeof state!=="undefined" && state.phase===2 && typeof setPhase==="function") setPhase(2);
+        }catch(e){}
+      }).catch(function(){});
+  }
+  pull(); setInterval(pull, 10000);
 })();
 </script>
 </body>

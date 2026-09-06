@@ -46,6 +46,9 @@ tb_logs/
 # Per-process logs: keep the folder (see logs/.gitkeep), drop the noisy contents
 logs/*.log
 
+# Live Phase-2 pipeline status (regenerated every 15s by report/phase2_status.py)
+docs/phase2_status.json
+
 # Editors / IDEs
 .idea/
 .vscode/
