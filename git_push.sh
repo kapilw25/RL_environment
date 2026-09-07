@@ -81,7 +81,7 @@ git add .
 git commit -m "$MESSAGE"
 
 # Disable credential helper temporarily and use token directly
-GIT_TERMINAL_PROMPT=0 git -c credential.helper= push https://${USERNAME}:${TOKEN}@github.com/kapilw25/RL_environment.git main
+GIT_TERMINAL_PROMPT=0 git -c credential.helper= push https://${USERNAME}:${TOKEN}@github.com/kapilw25/rl_environment.git main
 
 echo "Pushed as $ACCOUNT"
 
